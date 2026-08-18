@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
@@ -79,7 +80,6 @@ export default function Home() {
 
     const { error: insertError } = await supabase.from("images").insert({
       file_path: filePath,
-      title: file.name.replace(/\.[^/.]+$/, ""),
     });
 
     if (insertError) {
@@ -175,13 +175,12 @@ export default function Home() {
           ) : (
             <div className="columns-2 gap-3 md:columns-3 lg:columns-4 xl:columns-5">
               {filteredImages.map((image) => (
-                <button
+                <Link
                   key={image.id}
-                  type="button"
+                  href={`/relic/${image.id}`}
                   title={image.title ?? undefined}
-                  className="mb-3 block w-full break-inside-avoid overflow-hidden bg-zinc-100 text-left transition-opacity hover:opacity-75"
+                  className="mb-3 block w-full break-inside-avoid overflow-hidden bg-zinc-100 transition-opacity hover:opacity-75"
                 >
-                  {/* Native img preserves each source image's natural ratio in the masonry grid. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={publicUrl(image.file_path)}
@@ -189,7 +188,7 @@ export default function Home() {
                     className="h-auto w-full"
                     loading="lazy"
                   />
-                </button>
+                </Link>
               ))}
             </div>
           )}
