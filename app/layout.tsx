@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -24,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <Suspense fallback={null}>{children}</Suspense>
         <footer className="fixed bottom-2 right-3 z-20 pointer-events-none text-[9px] tracking-[0.08em] text-black/25">
           Designed by Pablo Monti
         </footer>
