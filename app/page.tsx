@@ -1,96 +1,198 @@
-const tags = [
-  ["photography", 24],
-  ["design", 18],
-  ["texture", 15],
-  ["typography", 12],
-  ["architecture", 9],
-  ["red", 7],
-  ["digital", 6],
-];
+"use client";
 
-const placeholders = [
-  { height: 320 },
-  { height: 460 },
-  { height: 260 },
-  { height: 390 },
-  { height: 520 },
-  { height: 300 },
-  { height: 430 },
-  { height: 350 },
-  { height: 480 },
-  { height: 280 },
-  { height: 410 },
-  { height: 330 },
-];
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+
+type Relic = {
+  id: string;
+  file_path: string;
+  title: string | null;
+  author: string | null;
+  source: string | null;
+  url: string | null;
+  notes: string | null;
+  created_at: string;
+};
 
 export default function Home() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [images, setImages] = useState<Relic[]>([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    loadImages();
+  }, []);
+
+  async function loadImages() {
+    setLoading(true);
+    setMessage("");
+
+    const { data, error } = await supabase
+      .from("images")
+      .select("id,file_path,title,author,source,url,notes,created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setImages(data ?? []);
+    }
+
+    setLoading(false);
+  }
+
+  async function handleFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !session) return;
+
+    setUploading(true);
+    setMessage("");
+
+    const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const filePath = `${crypto.randomUUID()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("images")
+      .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+    if (uploadError) {
+      setMessage(uploadError.message);
+      setUploading(false);
+      return;
+    }
+
+    const { error: insertError } = await supabase.from("images").insert({
+      file_path: filePath,
+      title: file.name.replace(/\.[^/.]+$/, ""),
+    });
+
+    if (insertError) {
+      await supabase.storage.from("images").remove([filePath]);
+      setMessage(insertError.message);
+      setUploading(false);
+      return;
+    }
+
+    await loadImages();
+    setUploading(false);
+  }
+
+  const filteredImages = useMemo(() => {
+    const term = query.trim().toLowerCase();
+    if (!term) return images;
+
+    return images.filter((image) =>
+      [image.title, image.author, image.source, image.notes]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(term)),
+    );
+  }, [images, query]);
+
+  function publicUrl(filePath: string) {
+    return supabase.storage.from("images").getPublicUrl(filePath).data.publicUrl;
+  }
+
   return (
     <main className="min-h-screen bg-white text-black">
-      {/* Header */}
       <header className="fixed left-0 right-0 top-0 z-20 flex h-16 items-center border-b border-black/10 bg-white px-6">
-        <h1 className="w-52 text-sm font-semibold tracking-[0.18em]">
-          EYE RELICS
-        </h1>
+        <h1 className="w-52 text-sm font-semibold tracking-[0.18em]">EYE RELICS</h1>
 
         <div className="flex flex-1 justify-center">
           <input
             type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Search"
             className="w-full max-w-xl border-b border-black/20 bg-transparent px-1 py-2 text-sm outline-none transition-colors placeholder:text-black/35 focus:border-black"
           />
         </div>
 
         <div className="flex w-52 justify-end">
-          <button
-            type="button"
-            aria-label="Add image"
-            className="flex h-9 w-9 items-center justify-center text-2xl font-light transition-opacity hover:opacity-40"
-          >
-            +
-          </button>
+          {session ? (
+            <>
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/*"
+                onChange={handleFile}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInput.current?.click()}
+                disabled={uploading}
+                aria-label="Add image"
+                title={uploading ? "Uploading" : "Add image"}
+                className="flex h-9 w-9 items-center justify-center text-2xl font-light transition-opacity hover:opacity-40 disabled:opacity-25"
+              >
+                {uploading ? "·" : "+"}
+              </button>
+            </>
+          ) : (
+            <a href="/login" className="text-[10px] uppercase tracking-[0.18em] text-black/35 hover:text-black">
+              Login
+            </a>
+          )}
         </div>
       </header>
 
       <div className="flex pt-16">
-        {/* Sidebar */}
         <aside className="fixed bottom-0 left-0 top-16 w-52 overflow-y-auto border-r border-black/10 px-6 py-8">
           <nav>
-            <button className="mb-8 block text-xs font-medium uppercase tracking-widest">
-              All
-            </button>
-
-            <p className="mb-4 text-[10px] uppercase tracking-[0.18em] text-black/35">
-              Tags
-            </p>
-
-            <div className="space-y-2">
-              {tags.map(([tag, count]) => (
-                <button
-                  key={tag}
-                  className="flex w-full items-center justify-between text-left text-sm transition-opacity hover:opacity-40"
-                >
-                  <span>{tag}</span>
-                  <span className="text-xs text-black/30">{count}</span>
-                </button>
-              ))}
-            </div>
+            <button className="mb-8 block text-xs font-medium uppercase tracking-widest">All</button>
+            <p className="mb-4 text-[10px] uppercase tracking-[0.18em] text-black/35">Tags</p>
+            <p className="text-xs leading-5 text-black/30">No tags yet</p>
           </nav>
         </aside>
 
-        {/* Gallery */}
         <section className="ml-52 w-[calc(100%-13rem)] p-6">
-          <div className="columns-2 gap-3 md:columns-3 lg:columns-4 xl:columns-5">
-            {placeholders.map((item, index) => (
-              <button
-                key={index}
-                className="mb-3 block w-full break-inside-avoid overflow-hidden bg-zinc-100 transition-opacity hover:opacity-75"
-                style={{ height: `${item.height}px` }}
-                aria-label={`Placeholder image ${index + 1}`}
-              >
-                <span className="text-xs text-black/20">{index + 1}</span>
-              </button>
-            ))}
-          </div>
+          {message && <p className="mb-6 text-xs text-black/50">{message}</p>}
+
+          {loading ? (
+            <p className="text-xs text-black/30">Loading...</p>
+          ) : filteredImages.length === 0 ? (
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <p className="text-xs text-black/30">
+                {images.length === 0 ? (session ? "Use + to add the first relic." : "No relics yet.") : "No results."}
+              </p>
+            </div>
+          ) : (
+            <div className="columns-2 gap-3 md:columns-3 lg:columns-4 xl:columns-5">
+              {filteredImages.map((image) => (
+                <button
+                  key={image.id}
+                  type="button"
+                  title={image.title ?? undefined}
+                  className="mb-3 block w-full break-inside-avoid overflow-hidden bg-zinc-100 text-left transition-opacity hover:opacity-75"
+                >
+                  {/* Native img preserves each source image's natural ratio in the masonry grid. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={publicUrl(image.file_path)}
+                    alt={image.title || "Eye Relic"}
+                    className="h-auto w-full"
+                    loading="lazy"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </main>
